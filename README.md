@@ -8,20 +8,19 @@
 
 In this competition your `Agent` is evaluated against a private question set in the same format. At test time `Env` draws **K=5 disjoint subsets of 10 questions** each (5 easy + 5 hard, shuffled with a fixed seed). Each subset is sent to your agent as a single batch via `agent.answer(questions: list[str]) -> list[float]` — one numeric answer per question. Each subset has a **60-second timeout**; if a batch fails or times out, no further subsets are sent. Score = number of replies matching the gold answer to within `1e-6`, summed across all delivered subsets. Format errors (replies that are not coercible to float) are reported separately. See `agent_template.py` for the minimal interface and `Agent.py` for a SmolLM3-3B baseline with batched generation and 3-shot prompting.
 
-**HF model cache.** The evaluation platform pre-populates a Hugging Face cache so popular checkpoints don't need to be re-downloaded inside your 60-second batch budget. Point HF at it by passing `cache_dir=os.environ.get("HF_HOME", "/opt/hf_cache")` to `AutoModelForCausalLM.from_pretrained` and `AutoTokenizer.from_pretrained` (the local default `/opt/hf_cache` is what the platform mounts; the env var fallback lets the same code work on your laptop).
-
-# Competition link:  
-
-Enroll with this ml-arena competition ID, and submit your agent on this link:  
-[https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2](https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2)   
-
-Available models on the platform:
+**HF model cache.** The evaluation platform pre-populates a Hugging Face cache so popular checkpoints don't need to be re-downloaded inside your 60-second batch budget and 100MB upload limit. By default the`AutoModelForCausalLM.from_pretrained` and `AutoTokenizer.from_pretrained` should locate the HF cache and find the available models:
 
 | Model                        | Size  |
 | ---------------------------- | ----- |
 | `HuggingFaceTB/SmolLM3-3B`   | 5.8 G |
 | `Qwen/Qwen2.5-0.5B-Instruct` | 954 M |
 | `Qwen/Qwen3-1.7B`            | 3.8 G |
+
+
+# Ml-arena competition link:  
+
+Enroll with this ml-arena competition ID, and submit your agent on this link:  
+[https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2](https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2)   
 
 
 # External infos:  
