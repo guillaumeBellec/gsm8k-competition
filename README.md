@@ -15,6 +15,18 @@ In this competition your `Agent` is evaluated against a private question set in 
 Enroll with this ml-arena competition ID, and submit your agent on this link:  
 [https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2](https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2)   
 
+Available models on the platform are:  
+
+  ┌────────────────────────────┬───────┐
+  │           Model            │ Size  │
+  ├────────────────────────────┼───────┤
+  │ HuggingFaceTB/SmolLM3-3B   │ 5.8 G │
+  ├────────────────────────────┼───────┤
+  │ Qwen/Qwen2.5-0.5B-Instruct │ 954 M │
+  ├────────────────────────────┼───────┤
+  │ Qwen/Qwen3-1.7B            │ 3.8 G │
+  └────────────────────────────┴───────┘
+
 
 # External infos:  
 

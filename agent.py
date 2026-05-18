@@ -20,8 +20,6 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-HF_CACHE_DIR = os.environ.get("HF_HOME", "/opt/hf_cache")
-
 
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,]\d+)*")
 
@@ -48,28 +46,16 @@ SYSTEM_PROMPT = """You are a careful math tutor. Solve the problem step by step,
 class Agent:
     def __init__(self):
 
-        cache_dir = os.environ.get("HF_HUB_CACHE", "/opt/hf_cache")
-
-        if not torch.cuda.is_available():
-            raise RuntimeError(
-                "SmolLM3-3B requires a GPU. torch.cuda.is_available() is False — "
-                "check the engine's gpu_device_ids/gpu_memory_limit config."
-            )
-
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            MODEL_NAME, cache_dir=cache_dir, local_files_only=True
-        )
-        # Left padding is required for batched causal generation: every
-        # sample's "next token" position must align at the right edge.
+        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         self.tokenizer.padding_side = "left"
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+
         self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
             torch_dtype=torch.bfloat16,
             device_map="auto",
-            cache_dir=cache_dir,
-        ).to("cuda")
+        )
         self.model.eval()
 
     def answer(self, questions: list[str]) -> list[float]:
