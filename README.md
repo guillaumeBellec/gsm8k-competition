@@ -10,7 +10,13 @@ In this competition your `Agent` is evaluated against a private question set in 
 
 **HF model cache.** The evaluation platform pre-populates a Hugging Face cache so popular checkpoints don't need to be re-downloaded inside your 60-second batch budget. Point HF at it by passing `cache_dir=os.environ.get("HF_HOME", "/opt/hf_cache")` to `AutoModelForCausalLM.from_pretrained` and `AutoTokenizer.from_pretrained` (the local default `/opt/hf_cache` is what the platform mounts; the env var fallback lets the same code work on your laptop).
 
-# Competition link:
+# Competition link:  
 
-Enroll with this ml-arena competition ID, and submit your agent on this link:
-[https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2](https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2)  
+Enroll with this ml-arena competition ID, and submit your agent on this link:  
+[https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2](https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2)   
+
+
+# External infos:  
+
+HF LLM course: https://huggingface.co/learn/llm-course/chapter1/1  
+HF Agent course: https://huggingface.co/learn/agents-course/unit0/introduction  
