@@ -42,33 +42,22 @@ def _parse_final_number(text):
 
 MODEL_NAME = "HuggingFaceTB/SmolLM3-3B"
 
-SYSTEM_PROMPT = """You are a careful math tutor. Solve the problem step by step, then write the final numeric answer on a new line prefixed by '####'.
-
-Here are some worked examples:
-
-Question: Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?
-Answer: Natalia sold 48/2 = <<48/2=24>>24 clips in May.
-Natalia sold 48+24 = <<48+24=72>>72 clips altogether in April and May.
-#### 72
-
-Question: Weng earns $12 an hour for babysitting. Yesterday, she just did 50 minutes of babysitting. How much did she earn?
-Answer: Weng earns 12/60 = $<<12/60=0.2>>0.2 per minute.
-Working 50 minutes, she earned 0.2 x 50 = $<<0.2*50=10>>10.
-#### 10
-
-Question: Betty is saving money for a new wallet which costs $100. Betty has only half of the money she needs. Her parents decided to give her $15 for that purpose, and her grandparents twice as much as her parents. How much more money does Betty need to buy the wallet?
-Answer: In the beginning, Betty has only 100 / 2 = $<<100/2=50>>50.
-Betty's grandparents gave her 15 * 2 = $<<15*2=30>>30.
-This means, Betty needs 100 - 50 - 30 - 15 = $<<100-50-30-15=5>>5 more.
-#### 5
-
-Now solve the next problem in the same format."""
+SYSTEM_PROMPT = """You are a careful math tutor. Solve the problem step by step, then write the final numeric answer on a new line prefixed by '####'."""
 
 
 class Agent:
     def __init__(self):
+
+        cache_dir = os.environ.get("HF_HUB_CACHE", "/opt/hf_cache")
+
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "SmolLM3-3B requires a GPU. torch.cuda.is_available() is False — "
+                "check the engine's gpu_device_ids/gpu_memory_limit config."
+            )
+
         self.tokenizer = AutoTokenizer.from_pretrained(
-            MODEL_NAME, cache_dir=HF_CACHE_DIR,
+            MODEL_NAME, cache_dir=cache_dir, local_files_only=True
         )
         # Left padding is required for batched causal generation: every
         # sample's "next token" position must align at the right edge.
@@ -79,21 +68,21 @@ class Agent:
             MODEL_NAME,
             torch_dtype=torch.bfloat16,
             device_map="auto",
-            cache_dir=HF_CACHE_DIR,
-        )
+            cache_dir=cache_dir,
+        ).to("cuda")
         self.model.eval()
 
     def answer(self, questions: list[str]) -> list[float]:
         prompts = []
 
         for q in questions:
-            ## TODO: generate the prompt with toknizer.apply_chat_template(...)
+            ## TODO: generate the prompt with tokenizer.apply_chat_template(...)
             ##  include a SYSTEM_PROMPT and the appropriate question.
             prompt = ...
             prompts.append(prompt)
 
         ## TODO: define the inputs tokens
-        ##  inputs = self.tokeizer(...).to(self.model.device)
+        ##  inputs = self.tokenizer(...).to(self.model.device)
 
         inputs = ...
         # We move the input tokens to the GPU
@@ -110,7 +99,7 @@ class Agent:
         for i in range(len(questions)):
             ## TODO: define the reply string.
             ##  reply = self.tokenizer.decode(...).to(self.model.device)
-            reply = ///
+            reply = ...
             replies.append(_parse_final_number(reply))
 
         return replies
