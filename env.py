@@ -63,16 +63,38 @@ def _to_float(x):
 
 class Env:
     def __init__(self):
-        with open(DATA_PATH) as f:
-            items = json.load(f)
+        try:
+            with open(DATA_PATH) as f:
+                items = json.load(f)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Question set not found at {DATA_PATH!r}. "
+                f"Place question_set.json next to env.py."
+            ) from e
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Question set at {DATA_PATH!r} is not valid JSON: {e}"
+            ) from e
+
+        if not isinstance(items, list):
+            raise TypeError(
+                f"Question set at {DATA_PATH!r} must be a JSON list; "
+                f"got {type(items).__name__}."
+            )
+
         easy = [it for it in items if it.get("difficulty", "easy") != "hard"]
         hard = [it for it in items if it.get("difficulty") == "hard"]
         need_easy = K * EASY_PER_SUBSET
         need_hard = K * HARD_PER_SUBSET
-        if len(easy) < need_easy or len(hard) < need_hard:
+        if len(easy) < need_easy:
             raise ValueError(
-                f"Need >= {need_easy} easy/medium and >= {need_hard} hard items; "
-                f"got {len(easy)} and {len(hard)}."
+                f"Question set has {len(easy)} easy/medium items; "
+                f"need at least K * EASY_PER_SUBSET = {need_easy}."
+            )
+        if len(hard) < need_hard:
+            raise ValueError(
+                f"Question set has {len(hard)} hard items; "
+                f"need at least K * HARD_PER_SUBSET = {need_hard}."
             )
 
         rng = random.Random(SEED)
@@ -110,17 +132,23 @@ class Env:
                     timeout=BATCH_TIMEOUT,
                     catch_errors=True,
                 )
+                
                 if agent.last_error is not None:
-                    if first_error is None:
-                        first_error = agent.last_error
+                    # Proxy already typed the exception (e.g. "TimeoutError: ...");
+                    # surface verbatim and stop sending more subsets.
+                    first_error = first_error or agent.last_error
                     break
-                if not isinstance(replies, list) or len(replies) != len(q_batch):
-                    if first_error is None:
-                        first_error = (
-                            f"agent.answer returned {type(replies).__name__} "
-                            f"of length {len(replies) if hasattr(replies,'__len__') else '?'}, "
-                            f"expected list of length {len(q_batch)}"
-                        )
+                if not isinstance(replies, list):
+                    first_error = first_error or (
+                        f"TypeError: agent.answer must return a list of floats; "
+                        f"got {type(replies).__name__}."
+                    )
+                    break
+                if len(replies) != len(q_batch):
+                    first_error = first_error or (
+                        f"ValueError: agent.answer returned {len(replies)} replies "
+                        f"for a batch of {len(q_batch)} questions."
+                    )
                     break
 
                 for reply, gold in zip(replies, g_batch):
@@ -135,7 +163,7 @@ class Env:
             total = K * (EASY_PER_SUBSET + HARD_PER_SUBSET)
             entry = {
                 "agent_index": i,
-                "score": correct,
+                "score": correct / K,
                 "format_errors": format_errors,
                 "questions_received": received,
                 "info_message": (
@@ -143,9 +171,9 @@ class Env:
                     f"{received}/{total} received"
                 ),
             }
-            if first_error is not None and correct == 0:
-                entry["is_agent_code_error"] = True
+            if first_error is not None:
                 entry["agent_code_error_message"] = first_error
+                entry["is_agent_code_error"] = (correct == 0)
             results.append(entry)
 
         return {"agent_results": results}
