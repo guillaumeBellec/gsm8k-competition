@@ -22,6 +22,12 @@ In this competition your `Agent` is evaluated against a private question set in 
 Enroll with this ml-arena competition ID, and submit your agent on this link:  
 [https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2](https://ml-arena.com/enroll/05c13e15008e4167b6f91fe67abff6f2)   
 
+# Suggestions for improving your agent:
+
+* Optimizing generation parameters
+* Evaluate mathematical expressions with python (ex : 12+6*8 = ?)
+* Optimizing the prompt
+* Using and combining several generations with high temperature 
 
 # External infos:  
 
