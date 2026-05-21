@@ -23,7 +23,7 @@ import random
 import re
 
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set_private.json")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set.json")
 K = 5                       # number of subsets per agent
 EASY_PER_SUBSET = 5         # easy/medium picks per subset
 HARD_PER_SUBSET = 5         # hard picks per subset
