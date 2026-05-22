@@ -21,10 +21,11 @@ import math
 import os
 import random
 import re
+import time
 
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set.json")
-K = 5                       # number of subsets per agent
+DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set_private.json")
+K = 10                       # number of subsets per agent
 EASY_PER_SUBSET = 5         # easy/medium picks per subset
 HARD_PER_SUBSET = 5         # hard picks per subset
 BATCH_TIMEOUT = 60.0        # seconds per subset
@@ -122,17 +123,21 @@ class Env:
             received = 0
             format_errors = 0
             first_error = None
+            batch_times = []
+            token_counts = []
 
             for subset in self.subsets:
                 q_batch = [it["question"] for it in subset]
                 g_batch = [_gold_from_answer(it["answer"]) for it in subset]
 
+                t0 = time.time()
                 replies = agent.call(
                     "answer", q_batch,
                     timeout=BATCH_TIMEOUT,
                     catch_errors=True,
                 )
-                
+                batch_times.append(time.time() - t0)
+
                 if agent.last_error is not None:
                     # Proxy already typed the exception (e.g. "TimeoutError: ...");
                     # surface verbatim and stop sending more subsets.
@@ -151,6 +156,15 @@ class Env:
                     )
                     break
 
+                try:
+                    tokens = agent.call(
+                        "get_batch_tokens", catch_errors=True, default=None,
+                    )
+                except AttributeError:
+                    tokens = None
+                if isinstance(tokens, list):
+                    token_counts.extend(int(t) for t in tokens if isinstance(t, (int, float)))
+
                 for reply, gold in zip(replies, g_batch):
                     received += 1
                     pred = _to_float(reply)
@@ -161,11 +175,17 @@ class Env:
                         correct += 1
 
             total = K * (EASY_PER_SUBSET + HARD_PER_SUBSET)
+            avg_batch_time = (sum(batch_times) / len(batch_times)) if batch_times else 0.0
+            avg_tokens_per_question = (
+                sum(token_counts) / len(token_counts) if token_counts else None
+            )
             entry = {
                 "agent_index": i,
                 "score": correct / K,
                 "format_errors": format_errors,
                 "questions_received": received,
+                "avg_batch_time": avg_batch_time,
+                "avg_tokens_per_question": avg_tokens_per_question,
                 "info_message": (
                     f"{correct} correct, {format_errors} formatting errors, "
                     f"{received}/{total} received"
