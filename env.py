@@ -3,8 +3,11 @@
 At test time we draw K disjoint subsets of 10 questions each. Every subset
 contains 5 easy questions (drawn from items with difficulty "easy" or
 "medium") and 5 hard questions, shuffled. Each subset is sent to the agent
-as a single batch via `agent.answer(questions: list[str]) -> list[float]`:
-the agent must return one numeric answer per question. A subset has
+as a single batch via
+`agent.answer(questions: list[str]) -> (list[float], list[str])`:
+the agent returns one numeric solution and one thinking-trace string per
+question. A legacy `list[float]` return is still accepted; empty traces
+are synthesized in that case. A subset has
 BATCH_TIMEOUT seconds to complete; if it fails or times out, no further
 subsets are sent.
 
@@ -22,8 +25,12 @@ import math
 import os
 import random
 import re
+import textwrap
 import time
 import traceback
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 
 DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set.json")
@@ -105,6 +112,51 @@ def _to_float(x):
         return None
 
 
+def _get_font(size: int):
+    for path in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+    ):
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
+
+def _render_frame(question: str, thinking_trace: str, answer) -> np.ndarray:
+    """Black-on-white frame showing one (question, thinking_trace, answer) triple."""
+    W, H = 900, 600
+    img = Image.new("RGB", (W, H), (255, 255, 255))
+    d = ImageDraw.Draw(img)
+    header = _get_font(20)
+    body = _get_font(16)
+
+    y = 16
+    wrap_w = 90
+
+    def block(label, text):
+        nonlocal y
+        d.text((20, y), label, fill=(0, 0, 0), font=header)
+        y += 28
+        for line in textwrap.wrap(str(text), width=wrap_w) or [""]:
+            d.text((20, y), line, fill=(0, 0, 0), font=body)
+            y += 20
+            if y > H - 40:
+                return
+        y += 12
+
+    block("Question:", question)
+    block("Thinking trace:", thinking_trace)
+    block("Answer:", answer)
+
+    return np.array(img, dtype=np.uint8)
+
+
 class Env:
     def __init__(self, is_evaluation=False):
         data_path = DATA_PATH_PRIVATE if is_evaluation else DATA_PATH
@@ -161,6 +213,10 @@ class Env:
         self.gold = [_gold_from_answer(it["answer"])
                      for s in self.subsets for it in s]
 
+    def save_render(self, frame: np.ndarray) -> None:
+        """Hook for subclasses / external loggers; default is no-op."""
+        pass
+
     def evaluate(self, agents, agent_infos):
         results = []
         for i, agent in enumerate(agents):
@@ -169,7 +225,6 @@ class Env:
             format_errors = 0
             first_error = None
             batch_times = []
-            token_counts = []
 
             for subset in self.subsets:
                 q_batch = [it["question"] for it in subset]
@@ -188,31 +243,44 @@ class Env:
                     # surface verbatim and stop sending more subsets.
                     first_error = first_error or agent.last_error
                     break
-                if not isinstance(replies, list):
+
+                # New API: (solutions: list[float], thinking_traces: list[str]).
+                # Legacy: just list[float] — synthesize empty traces.
+                if isinstance(replies, tuple) and len(replies) == 2:
+                    solutions, thinking_traces = replies
+                elif isinstance(replies, list):
+                    solutions = replies
+                    thinking_traces = ["" for _ in solutions]
+                else:
                     first_error = first_error or (
-                        f"TypeError: agent.answer must return a list of floats; "
-                        f"got {type(replies).__name__}."
+                        f"TypeError: agent.answer must return list[float] or "
+                        f"(list[float], list[str]); got {type(replies).__name__}."
                     )
                     break
-                if len(replies) != len(q_batch):
+
+                if not isinstance(solutions, list) or not isinstance(thinking_traces, list):
                     first_error = first_error or (
-                        f"ValueError: agent.answer returned {len(replies)} replies "
+                        "TypeError: agent.answer must return list[float] or "
+                        "(list[float], list[str])."
+                    )
+                    break
+                if len(solutions) != len(q_batch):
+                    first_error = first_error or (
+                        f"ValueError: agent.answer returned {len(solutions)} solutions "
+                        f"for a batch of {len(q_batch)} questions."
+                    )
+                    break
+                if len(thinking_traces) != len(q_batch):
+                    first_error = first_error or (
+                        f"ValueError: agent.answer returned {len(thinking_traces)} thinking_traces "
                         f"for a batch of {len(q_batch)} questions."
                     )
                     break
 
-                try:
-                    tokens = agent.call(
-                        "get_batch_tokens", catch_errors=True, default=None,
-                    )
-                except AttributeError:
-                    tokens = None
-                if isinstance(tokens, list):
-                    token_counts.extend(int(t) for t in tokens if isinstance(t, (int, float)))
-
-                for reply, gold in zip(replies, g_batch):
+                for q, trace, reply, gold in zip(q_batch, thinking_traces, solutions, g_batch):
                     received += 1
                     pred = _to_float(reply)
+                    self.save_render(_render_frame(q, trace, reply))
                     if pred is None:
                         format_errors += 1
                         continue
@@ -221,16 +289,12 @@ class Env:
 
             total = K * (EASY_PER_SUBSET + HARD_PER_SUBSET)
             avg_batch_time = (sum(batch_times) / len(batch_times)) if batch_times else 0.0
-            avg_tokens_per_question = (
-                sum(token_counts) / len(token_counts) if token_counts else None
-            )
             entry = {
                 "agent_index": i,
                 "score": correct / K,
                 "format_errors": format_errors,
                 "questions_received": received,
                 "avg_batch_time": avg_batch_time,
-                "avg_tokens_per_question": avg_tokens_per_question,
                 "info_message": (
                     f"{correct} correct, {format_errors} formatting errors, "
                     f"{received}/{total} received"
