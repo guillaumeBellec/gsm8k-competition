@@ -37,8 +37,9 @@ def _parse_final_number(text):
     except ValueError:
         return float("nan")
 
+#Choose the model you want to use. SmolLM3-3B is a good default for evaluation, but you can experiment with other models if you like. Just make sure to update the prompt and parsing logic in answer() if your model's output format differs from the expected "step by step solution ending with '#### N'".
 
-MODEL_NAME = "HuggingFaceTB/SmolLM3-3B"
+MODEL_NAME = "HuggingFaceTB/SmolLM3-3B" #"Qwen/Qwen2.5-0.5B-Instruct" #"Qwen/Qwen3-1.7B"
 
 SYSTEM_PROMPT = """You are a careful math tutor. Solve the problem step by step, then write the final numeric answer on a new line prefixed by '####'."""
 
@@ -58,17 +59,14 @@ class Agent:
         )
         self.model.eval()
 
-        # CUDA warm-up so the first real call doesn't pay model-loading /
-        # kernel-compile cost inside the timeout.
-        with torch.no_grad():
-            warmup = self.tokenizer("hello", return_tensors="pt").to(self.model.device)
-            self.model.generate(
-                **warmup,
-                max_new_tokens=4,
-                do_sample=False,
-                pad_token_id=self.tokenizer.eos_token_id,
-            )
-        torch.cuda.synchronize()
+  
+        # Trigger CUDA kernel compilation now, before any timeout window opens.
+        if torch.cuda.is_available():
+            dummy = self.tokenizer("warm-up", return_tensors="pt").to(self.model.device)
+            with torch.no_grad():
+                self.model.generate(**dummy, max_new_tokens=1,
+                                    pad_token_id=self.tokenizer.eos_token_id)
+            torch.cuda.synchronize()
 
     def answer(self, questions: list[str]) -> tuple[list[float], list[str]]:
         prompts = []
@@ -91,6 +89,10 @@ class Agent:
             ## TODO: run the LLM
             ##  outputs = self.model.generate(...).
             pass
+
+        # The function answer() return two lists : 
+            # A list of floats, one per question, anwering the question or NaN if parsing failed (This is used for evaluation)
+            # A list of strings, one per question, containing the full text output of the model (This is only used for renderring, just because it's fancy)
 
         floats = []
         thinking_traces = []
