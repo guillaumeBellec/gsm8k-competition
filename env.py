@@ -16,22 +16,65 @@ For each agent we return:
   - questions_received:  number of questions actually sent
 """
 
+import concurrent.futures
 import json
 import math
 import os
 import random
 import re
 import time
+import traceback
 
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set_private.json")
+DATA_PATH = os.path.join(os.path.dirname(__file__), "question_set.json")
+DATA_PATH_PRIVATE = os.path.join(os.path.dirname(__file__), "question_set_private.json")
+
 K = 10                       # number of subsets per agent
 EASY_PER_SUBSET = 5         # easy/medium picks per subset
 HARD_PER_SUBSET = 5         # hard picks per subset
 BATCH_TIMEOUT = 60.0        # seconds per subset
-SEED = 0                    # fixed sample is the same for every agent
+SEED = 56841                    # fixed sample is the same for every agent
 
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,]\d+)*")
+
+
+class _AgentProxy:
+    """Mimics the platform's AgentProxy: adds `.call(method, ..., timeout=, default=, catch_errors=)`.
+
+    Timeouts run the call in a worker thread; on timeout the parent abandons it
+    (the thread keeps running until the process exits), since `torch.generate`
+    can't be interrupted from another thread.
+    """
+
+    def __init__(self, agent):
+        self._agent = agent
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.last_error = None
+
+    def call(self, method, *args, timeout=None, default=None,
+             catch_errors=False, **kwargs):
+        self.last_error = None
+        fn = getattr(self._agent, method)
+        try:
+            if timeout is None:
+                return fn(*args, **kwargs)
+            future = self._executor.submit(fn, *args, **kwargs)
+            try:
+                return future.result(timeout=timeout)
+            except concurrent.futures.TimeoutError as e:
+                raise TimeoutError(
+                    f"agent.{method} exceeded timeout={timeout}s"
+                ) from e
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            if default is not None or catch_errors:
+                return default
+            raise
+
+
+def wrap(agent):
+    """Wrap a local agent so `agent.call(...)` mirrors the platform proxy."""
+    return _AgentProxy(agent)
 
 
 def _gold_from_answer(answer_field):
@@ -63,23 +106,25 @@ def _to_float(x):
 
 
 class Env:
-    def __init__(self):
+    def __init__(self, is_evaluation=False):
+        data_path = DATA_PATH_PRIVATE if is_evaluation else DATA_PATH
+
         try:
-            with open(DATA_PATH) as f:
+            with open(data_path) as f:
                 items = json.load(f)
         except FileNotFoundError as e:
             raise FileNotFoundError(
-                f"Question set not found at {DATA_PATH!r}. "
+                f"Question set not found at {data_path!r}. "
                 f"Place question_set.json next to env.py."
             ) from e
         except json.JSONDecodeError as e:
             raise ValueError(
-                f"Question set at {DATA_PATH!r} is not valid JSON: {e}"
+                f"Question set at {data_path!r} is not valid JSON: {e}"
             ) from e
 
         if not isinstance(items, list):
             raise TypeError(
-                f"Question set at {DATA_PATH!r} must be a JSON list; "
+                f"Question set at {data_path!r} must be a JSON list; "
                 f"got {type(items).__name__}."
             )
 
