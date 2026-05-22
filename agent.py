@@ -58,7 +58,19 @@ class Agent:
         )
         self.model.eval()
 
-    def answer(self, questions: list[str]) -> list[float]:
+        # CUDA warm-up so the first real call doesn't pay model-loading /
+        # kernel-compile cost inside the timeout.
+        with torch.no_grad():
+            warmup = self.tokenizer("hello", return_tensors="pt").to(self.model.device)
+            self.model.generate(
+                **warmup,
+                max_new_tokens=4,
+                do_sample=False,
+                pad_token_id=self.tokenizer.eos_token_id,
+            )
+        torch.cuda.synchronize()
+
+    def answer(self, questions: list[str]) -> tuple[list[float], list[str]]:
         prompts = []
 
         for q in questions:
@@ -80,12 +92,14 @@ class Agent:
             ##  outputs = self.model.generate(...).
             pass
 
-        replies = []
+        floats = []
+        thinking_traces = []
 
         for i in range(len(questions)):
             ## TODO: define the reply string.
             ##  reply = self.tokenizer.decode(...).to(self.model.device)
             reply = ...
-            replies.append(_parse_final_number(reply))
+            thinking_traces.append(reply)
+            floats.append(_parse_final_number(reply))
 
-        return replies
+        return floats, thinking_traces
