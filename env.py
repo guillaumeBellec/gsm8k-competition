@@ -160,6 +160,9 @@ def _render_frame(question: str, thinking_trace: str, answer) -> np.ndarray:
 class Env:
     def __init__(self, is_evaluation=False):
         data_path = DATA_PATH_PRIVATE if is_evaluation else DATA_PATH
+        # Fall back to the public set if the private one isn't present.
+        if is_evaluation and not os.path.exists(DATA_PATH_PRIVATE):
+            data_path = DATA_PATH
 
         try:
             with open(data_path) as f:
