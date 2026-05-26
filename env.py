@@ -40,7 +40,7 @@ K = 10                       # number of subsets per agent
 EASY_PER_SUBSET = 5         # easy/medium picks per subset
 HARD_PER_SUBSET = 5         # hard picks per subset
 BATCH_TIMEOUT = 60.0        # seconds per subset
-SEED = 56841                    # fixed sample is the same for every agent
+SEED = 554284                    # fixed sample is the same for every agent
 
 _NUMBER_RE = re.compile(r"-?\d+(?:[.,]\d+)*")
 
@@ -245,8 +245,13 @@ class Env:
                     break
 
                 # New API: (solutions: list[float], thinking_traces: list[str]).
-                # Legacy: just list[float] — synthesize empty traces.
-                if isinstance(replies, tuple) and len(replies) == 2:
+                # JSON transport coerces tuples to lists, so accept a list of
+                # two lists as the tuple form. Legacy: a flat list[float].
+                if (
+                    isinstance(replies, (list, tuple))
+                    and len(replies) == 2
+                    and all(isinstance(r, list) for r in replies)
+                ):
                     solutions, thinking_traces = replies
                 elif isinstance(replies, list):
                     solutions = replies
