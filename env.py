@@ -230,6 +230,7 @@ class Env:
             format_errors = 0
             first_error = None
             batch_times = []
+            subsets_run = 0
 
             for subset in self.subsets:
                 q_batch = [it["question"] for it in subset]
@@ -297,7 +298,15 @@ class Env:
                     if gold is not None and abs(pred - gold) < 1e-6:
                         correct += 1
 
-            n_subsets = len(self.subsets)
+                subsets_run += 1
+                # Stage 1 → 2: after 2 subsets, need avg > 2/10 to continue
+                if subsets_run == 2 and correct / subsets_run <= 2.0:
+                    break
+                # Stage 2 → 3: after 5 subsets, need avg > 8.5/10 to continue
+                if subsets_run == 5 and correct / subsets_run <= 8.5:
+                    break
+
+            n_subsets = subsets_run if subsets_run > 0 else 1
             total = n_subsets * (EASY_PER_SUBSET + HARD_PER_SUBSET)
             avg_batch_time = (sum(batch_times) / len(batch_times)) if batch_times else 0.0
             entry = {
