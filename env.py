@@ -182,17 +182,19 @@ class Env:
 
         easy = [it for it in items if it.get("difficulty", "easy") != "hard"]
         hard = [it for it in items if it.get("difficulty") == "hard"]
-        need_easy = K * EASY_PER_SUBSET
-        need_hard = K * HARD_PER_SUBSET
+        # At evaluation we draw K subsets; locally we only run a single batch.
+        n_subsets = K if is_evaluation else 1
+        need_easy = n_subsets * EASY_PER_SUBSET
+        need_hard = n_subsets * HARD_PER_SUBSET
         if len(easy) < need_easy:
             raise ValueError(
                 f"Question set has {len(easy)} easy/medium items; "
-                f"need at least K * EASY_PER_SUBSET = {need_easy}."
+                f"need at least n_subsets * EASY_PER_SUBSET = {need_easy}."
             )
         if len(hard) < need_hard:
             raise ValueError(
                 f"Question set has {len(hard)} hard items; "
-                f"need at least K * HARD_PER_SUBSET = {need_hard}."
+                f"need at least n_subsets * HARD_PER_SUBSET = {need_hard}."
             )
 
         rng = random.Random(SEED)
@@ -200,7 +202,7 @@ class Env:
         rng.shuffle(hard)
 
         self.subsets = []
-        for k in range(K):
+        for k in range(n_subsets):
             chunk = (
                 easy[k * EASY_PER_SUBSET:(k + 1) * EASY_PER_SUBSET]
                 + hard[k * HARD_PER_SUBSET:(k + 1) * HARD_PER_SUBSET]
@@ -292,11 +294,12 @@ class Env:
                     if gold is not None and abs(pred - gold) < 1e-6:
                         correct += 1
 
-            total = K * (EASY_PER_SUBSET + HARD_PER_SUBSET)
+            n_subsets = len(self.subsets)
+            total = n_subsets * (EASY_PER_SUBSET + HARD_PER_SUBSET)
             avg_batch_time = (sum(batch_times) / len(batch_times)) if batch_times else 0.0
             entry = {
                 "agent_index": i,
-                "score": correct / K,
+                "score": correct / n_subsets,
                 "format_errors": format_errors,
                 "questions_received": received,
                 "avg_batch_time": avg_batch_time,
